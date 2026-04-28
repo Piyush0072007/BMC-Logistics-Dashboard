@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BMC Logistics — Smart Supply Chain Command Center</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Chart.js (for AI Delay Forecast chart) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+
+  <!-- D3.js (for world map rendering) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+
+  <!-- TopoJSON (converts topology to GeoJSON for D3) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+
+  <style>
+    /* ─── RESET & ROOT VARIABLES ──────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --neon-cyan:   #00f5ff;
+      --neon-green:  #39ff14;
+      --neon-amber:  #ffb800;
+      --neon-red:    #ff3860;
+      --neon-purple: #bf5fff;
+      --bg-deep:     #040810;
+      --bg-panel:    rgba(6, 15, 30, 0.97);
+      --bg-card:     rgba(10, 22, 45, 0.92);
+      --border-glow: rgba(0, 245, 255, 0.18);
+      --text-pri:    #e8f4ff;
+      --text-sec:    rgba(180, 210, 255, 0.65);
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg-deep);
+      color: var(--text-pri);
+      font-family: 'Syne', sans-serif;
+    }
+
+    /* ─── HEADER ──────────────────────────────────────────────── */
+    .sc-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 28px;
+      background: rgba(0, 20, 40, 0.98);
+      border-bottom: 1px solid var(--border-glow);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      height: 57px;
+    }
+
+    .sc-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      color: var(--neon-cyan);
+      text-shadow: 0 0 18px rgba(0, 245, 255, 0.6);
+    }
+
+    .sc-logo-icon {
+      width: 32px;
+      height: 32px;
+      background: rgba(0, 245, 255, 0.07);
+      border: 1.5px solid var(--neon-cyan);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .sc-status-row {
+      display: flex;
+      gap: 20px;
+      align-items: center;
+    }
+
+    .sc-status-dot {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-family: 'Space Mono', monospace;
+      color: var(--text-sec);
+    }
+
+    .dot-pulse {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--neon-green);
+      box-shadow: 0 0 6px var(--neon-green);
+      animation: blink 1.4s ease-in-out infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+
+    .sc-time {
+      font-family: 'Space Mono', monospace;
+      font-size: 12px;
+      color: var(--neon-amber);
+      text-shadow: 0 0 8px rgba(255, 184, 0, 0.4);
+    }
+
+    /* ─── BODY LAYOUT ─────────────────────────────────────────── */
+    .sc-body {
+      display: flex;
+      height: calc(100vh - 57px);
+    }
+
+    /* ─── SIDEBAR ─────────────────────────────────────────────── */
+    .sc-sidebar {
+      width: 285px;
+      min-width: 285px;
+      background: var(--bg-panel);
+      border-right: 1px solid var(--border-glow);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 16px;
+      gap: 12px;
+    }
+
+    .panel-title {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      color: var(--text-sec);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .panel-title::before {
+      content: '';
+      width: 3px;
+      height: 12px;
+      background: var(--neon-cyan);
+      border-radius: 2px;
+      box-shadow: 0 0 6px var(--neon-cyan);
+    }
+
+    /* ─── KPI CARDS ───────────────────────────────────────────── */
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-glow);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+
+    .kpi-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: var(--text-sec);
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+
+    .kpi-value {
+      font-size: 26px;
+      font-weight: 800;
+      font-family: 'Space Mono', monospace;
+      line-height: 1;
+    }
+
+    .kpi-trend {
+      display: inline-block;
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      margin-top: 7px;
+      font-family: 'Space Mono', monospace;
+    }
+
+    .trend-up  { background: rgba(57, 255, 20, 0.12);  color: var(--neon-green); }
+    .trend-dn  { background: rgba(255, 56, 96, 0.12);  color: var(--neon-red);   }
+    .trend-neu { background: rgba(255, 184, 0, 0.12);  color: var(--neon-amber); }
+
+    /* ─── RISK BARS ───────────────────────────────────────────── */
+    .sc-section-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-sec);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 4px 0;
+    }
+
+    .risk-bar-wrap { margin-bottom: 8px; }
+
+    .risk-bar-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--text-sec);
+      margin-bottom: 3px;
+      font-family: 'Space Mono', monospace;
+    }
+
+    .risk-bar-track {
+      height: 4px;
+      background: rgba(255, 255, 255, 0.07);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .risk-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      width: 0%;
+      transition: width 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* ─── CHATBOT ─────────────────────────────────────────────── */
+    .chatbot-wrapper {
+      background: var(--bg-card);
+      border: 1px solid var(--border-glow);
+      border-radius: 10px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .chat-header {
+      background: rgba(0, 245, 255, 0.07);
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--neon-cyan);
+      letter-spacing: 0.08em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .chat-messages {
+      height: 110px;
+      overflow-y: auto;
+      padding: 8px 12px;
+      font-size: 11px;
+      line-height: 1.5;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(0, 245, 255, 0.2) transparent;
+    }
+
+    .chat-messages::-webkit-scrollbar { width: 4px; }
+    .chat-messages::-webkit-scrollbar-thumb { background: rgba(0, 245, 255, 0.2); border-radius: 2px; }
+
+    .chat-msg { margin-bottom: 5px; }
+    .chat-msg.ai   { color: var(--neon-cyan); }
+    .chat-msg.user { color: var(--text-sec); text-align: right; }
+
+    .chat-input-row {
+      display: flex;
+      border-top: 1px solid var(--border-glow);
+    }
+
+    .chat-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      padding: 8px 12px;
+      font-size: 11px;
+      color: var(--text-pri);
+      font-family: 'Space Mono', monospace;
+    }
+
+    .chat-send {
+      background: rgba(0, 245, 255, 0.1);
+      border: none;
+      border-left: 1px solid var(--border-glow);
+      color: var(--neon-cyan);
+      padding: 8px 14px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+
+    .chat-send:hover { background: rgba(0, 245, 255, 0.22); }
+
+    .voice-btn {
+      margin-left: auto;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 1.5px solid var(--neon-purple);
+      background: rgba(191, 95, 255, 0.1);
+      color: var(--neon-purple);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+
+    .voice-btn:hover { background: rgba(191, 95, 255, 0.22); box-shadow: 0 0 10px rgba(191, 95, 255, 0.35); }
+    .voice-btn.listening { animation: pulseVoice 1s ease infinite; }
+
+    @keyframes pulseVoice {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(191, 95, 255, 0.5); }
+      50%       { box-shadow: 0 0 0 8px rgba(191, 95, 255, 0); }
+    }
+
+    .typing-indicator { display: flex; gap: 3px; align-items: center; padding: 4px 0; }
+
+    .typing-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--neon-cyan);
+      animation: typingBounce 1.2s ease infinite;
+    }
+
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes typingBounce {
+      0%, 80%, 100% { transform: translateY(0); }
+      40%           { transform: translateY(-4px); }
+    }
+
+    /* ─── MAIN AREA ───────────────────────────────────────────── */
+    .sc-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    /* ─── MAP ─────────────────────────────────────────────────── */
+    .sc-map-area {
+      flex: 1;
+      position: relative;
+      background: #020a14;
+      overflow: hidden;
+    }
+
+    #world-map {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .map-legend {
+      position: absolute;
+      top: 12px;
+      right: 14px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      font-size: 10px;
+      font-family: 'Space Mono', monospace;
+      color: var(--text-sec);
+    }
+
+    .map-legend span { display: flex; align-items: center; gap: 5px; }
+
+    .legend-line {
+      width: 22px;
+      height: 2px;
+      display: inline-block;
+    }
+
+    .map-tooltip {
+      position: absolute;
+      background: rgba(4, 8, 16, 0.97);
+      border: 1px solid var(--border-glow);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 11px;
+      color: var(--text-pri);
+      font-family: 'Space Mono', monospace;
+      pointer-events: none;
+      z-index: 50;
+      display: none;
+    }
+
+    /* ─── BOTTOM STRIP ────────────────────────────────────────── */
+    .sc-bottom {
+      height: 225px;
+      display: flex;
+      border-top: 1px solid var(--border-glow);
+      flex-shrink: 0;
+    }
+
+    .sc-chart-panel {
+      flex: 1;
+      padding: 14px 18px;
+      background: var(--bg-panel);
+      border-right: 1px solid var(--border-glow);
+      min-width: 0;
+    }
+
+    #ai-chart-wrap {
+      position: relative;
+      width: 100%;
+      height: 160px;
+    }
+
+    /* ─── ALERTS PANEL ────────────────────────────────────────── */
+    .sc-alerts-panel {
+      width: 305px;
+      min-width: 305px;
+      background: var(--bg-panel);
+      padding: 14px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(0, 245, 255, 0.15) transparent;
+    }
+
+    .sc-alerts-panel::-webkit-scrollbar { width: 3px; }
+    .sc-alerts-panel::-webkit-scrollbar-thumb { background: rgba(0, 245, 255, 0.2); border-radius: 2px; }
+
+    .alert-item {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      padding: 8px 10px;
+      border-radius: 8px;
+      margin-bottom: 7px;
+      border: 1px solid transparent;
+      font-size: 11px;
+      cursor: pointer;
+      animation: slideIn 0.35s ease forwards;
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(18px); opacity: 0; }
+      to   { transform: translateX(0);    opacity: 1; }
+    }
+
+    .alert-critical { background: rgba(255, 56, 96, 0.08);  border-color: rgba(255, 56, 96, 0.28); }
+    .alert-warning  { background: rgba(255, 184, 0, 0.08);  border-color: rgba(255, 184, 0, 0.25); }
+    .alert-info     { background: rgba(0, 245, 255, 0.06);  border-color: rgba(0, 245, 255, 0.18); }
+
+    .alert-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      margin-top: 3px;
+      flex-shrink: 0;
+      animation: blink 1.4s ease infinite;
+    }
+
+    .alert-critical .alert-dot { background: var(--neon-red);   box-shadow: 0 0 5px var(--neon-red);   }
+    .alert-warning  .alert-dot { background: var(--neon-amber); box-shadow: 0 0 5px var(--neon-amber); }
+    .alert-info     .alert-dot { background: var(--neon-cyan);  box-shadow: 0 0 5px var(--neon-cyan);  animation: none; }
+
+    .alert-msg  { color: var(--text-pri); line-height: 1.45; }
+    .alert-time { font-size: 9px; color: var(--text-sec); margin-top: 2px; font-family: 'Space Mono', monospace; }
+
+    /* ─── SCROLLBAR GLOBAL ────────────────────────────────────── */
+    .sc-sidebar { scrollbar-width: thin; scrollbar-color: rgba(0,245,255,0.15) transparent; }
+    .sc-sidebar::-webkit-scrollbar { width: 3px; }
+    .sc-sidebar::-webkit-scrollbar-thumb { background: rgba(0,245,255,0.2); border-radius:2px; }
+
+    /* ─── SHIPMENT ROUTE PATHS ────────────────────────────────── */
+    .shipment-route { fill: none; stroke-width: 1.5; stroke-linecap: round; }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     HEADER
+═══════════════════════════════════════════════════════════════ -->
+<header class="sc-header">
+  <div class="sc-logo">
+    <div class="sc-logo-icon">⬡</div>
+    BMC LOGISTICS · COMMAND CENTER
+  </div>
+  <div class="sc-status-row">
+    <div class="sc-status-dot"><div class="dot-pulse"></div> LIVE FEED</div>
+    <div class="sc-status-dot">🛰 14 SATELLITES ACTIVE</div>
+    <div class="sc-time" id="live-time">--:--:--</div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     BODY
+═══════════════════════════════════════════════════════════════ -->
+<div class="sc-body">
+
+  <!-- ─── SIDEBAR ────────────────────────────────────────────── -->
+  <aside class="sc-sidebar">
+
+    <div class="panel-title">KPI Overview</div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">Active Shipments</div>
+      <div class="kpi-value" style="color:var(--neon-cyan)" id="kpi-shipments">0</div>
+      <div class="kpi-trend trend-up">+12 this hour</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">On-Time Delivery %</div>
+      <div class="kpi-value" style="color:var(--neon-green)" id="kpi-otd">0%</div>
+      <div class="kpi-trend trend-up">↑ 2.4% vs yesterday</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">Disruptions Detected</div>
+      <div class="kpi-value" style="color:var(--neon-red)" id="kpi-disruptions">0</div>
+      <div class="kpi-trend trend-dn">3 critical · 5 warning</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">Avg. Delay (hours)</div>
+      <div class="kpi-value" style="color:var(--neon-amber)" id="kpi-delay">0.0</div>
+      <div class="kpi-trend trend-neu">↓ AI rerouted 6 loads</div>
+    </div>
+
+    <div class="sc-section-label">Risk Heatmap by Corridor</div>
+    <div id="risk-bars"></div>
+
+    <!-- AI Chatbot -->
+    <div class="chatbot-wrapper">
+      <div class="chat-header">
+        <span style="font-size:15px">🤖</span>
+        NEXUS AI ASSISTANT
+        <button class="voice-btn" id="voice-btn" title="Voice input (Chrome only)">🎙</button>
+      </div>
+      <div class="chat-messages" id="chat-msgs">
+        <div class="chat-msg ai">Hello! I'm monitoring 2,847 active shipments across 6 continents. Ask me about delays, risk zones, or optimal routes.</div>
+      </div>
+      <div class="chat-input-row">
+        <input class="chat-input" id="chat-input" placeholder="Ask: delay, risk, route, shipment..." />
+        <button class="chat-send" id="chat-send-btn">↗</button>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ─── MAIN ────────────────────────────────────────────────── -->
+  <main class="sc-main">
+
+    <!-- MAP AREA -->
+    <div class="sc-map-area" id="map-area">
+      <svg id="world-map"></svg>
+
+      <!-- Legend -->
+      <div class="map-legend">
+        <span><span class="legend-line" style="background:var(--neon-cyan);box-shadow:0 0 5px var(--neon-cyan)"></span>SEA</span>
+        <span><span class="legend-line" style="background:var(--neon-amber);box-shadow:0 0 5px var(--neon-amber)"></span>AIR</span>
+        <span><span class="legend-line" style="background:var(--neon-green);box-shadow:0 0 5px var(--neon-green)"></span>LAND</span>
+        <span><span class="legend-line" style="background:var(--neon-red);border-top:1.5px dashed var(--neon-red)"></span>RISK</span>
+      </div>
+
+      <!-- Tooltip -->
+      <div class="map-tooltip" id="map-tooltip"></div>
+    </div>
+
+    <!-- BOTTOM STRIP -->
+    <div class="sc-bottom">
+
+      <!-- AI Delay Chart -->
+      <div class="sc-chart-panel">
+        <div class="panel-title">AI Predictive Delay Forecast</div>
+        <div id="ai-chart-wrap">
+          <canvas id="ai-delay-chart"
+            role="img"
+            aria-label="AI predictive delay forecast line chart — predicted vs actual delays over 14 days with anomaly markers">
+            AI delay forecast chart — predicted vs actual delay hours over the past 14 days.
+          </canvas>
+        </div>
+      </div>
+
+      <!-- Alerts Panel -->
+      <div class="sc-alerts-panel">
+        <div class="panel-title">Live Alerts</div>
+        <div id="alerts-list"></div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     JAVASCRIPT
+═══════════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+  'use strict';
+
+  /* ── UTILITIES ──────────────────────────────────────────────── */
+  const $ = id => document.getElementById(id);
+
+  /* ── LIVE CLOCK ─────────────────────────────────────────────── */
+  function updateClock() {
+    $('live-time').textContent = new Date().toUTCString().split(' ')[4] + ' UTC';
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
+
+  /* ── KPI ANIMATED COUNTERS ──────────────────────────────────── */
+  function animateCount(el, target, suffix = '', decimals = 0, duration = 1800) {
+    const startTime = performance.now();
+    function step(now) {
+      const progress = Math.min((now - startTime) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+      const val = target * eased;
+      el.textContent = decimals > 0
+        ? val.toFixed(decimals) + suffix
+        : Math.round(val) + suffix;
+      if (progress < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  // Kick off counters after slight delay so page has painted
+  setTimeout(() => {
+    animateCount($('kpi-shipments'),   2847);
+    animateCount($('kpi-otd'),         94,  '%');
+    animateCount($('kpi-disruptions'), 8);
+    animateCount($('kpi-delay'),       1.7, '',  1);
+  }, 400);
+
+  // Keep active shipment count ticking live
+  setInterval(() => {
+    const current = parseInt($('kpi-shipments').textContent.replace(/\D/g, '')) || 2847;
+    $('kpi-shipments').textContent = current + Math.floor(Math.random() * 3) - 1;
+  }, 4500);
+
+  /* ── RISK HEATMAP BARS ──────────────────────────────────────── */
+  const RISKS = [
+    { label: 'Pacific Corridor',  val: 78, color: '#ff3860' },
+    { label: 'Suez Transit',      val: 61, color: '#ffb800' },
+    { label: 'EU Rail Network',   val: 38, color: '#ffb800' },
+    { label: 'Trans-Siberian',    val: 22, color: '#39ff14' },
+    { label: 'US Interstate',     val: 15, color: '#39ff14' },
+  ];
+
+  const riskContainer = $('risk-bars');
+  RISKS.forEach(r => {
+    const wrap = document.createElement('div');
+    wrap.className = 'risk-bar-wrap';
+    wrap.innerHTML = `
+      <div class="risk-bar-label">
+        <span>${r.label}</span>
+        <span style="color:${r.color}">${r.val}%</span>
+      </div>
+      <div class="risk-bar-track">
+        <div class="risk-bar-fill" style="background:${r.color};box-shadow:0 0 5px ${r.color}"></div>
+      </div>`;
+    riskContainer.appendChild(wrap);
+    // Animate fill width after paint
+    setTimeout(() => {
+      wrap.querySelector('.risk-bar-fill').style.width = r.val + '%';
+    }, 600);
+  });
+
+  /* ── LIVE ALERTS ────────────────────────────────────────────── */
+  const ALERTS_POOL = [
+    { type: 'critical', msg: 'Typhoon Hinnamnor — Pacific route SH-449 suspended. 23 containers rerouted.', time: '0m ago' },
+    { type: 'critical', msg: 'Port of Rotterdam congestion: 18hr delay detected on EU-ASIA corridor.', time: '4m ago' },
+    { type: 'warning',  msg: 'Predicted bottleneck on I-95 corridor next 6hrs. AI rerouting 7 trucks.', time: '9m ago' },
+    { type: 'warning',  msg: 'Fuel price spike +14% on trans-Atlantic lane. Cost model updated.', time: '15m ago' },
+    { type: 'info',     msg: 'AI anomaly cleared: Shanghai–LA Route LA-882 back to normal flow.', time: '22m ago' },
+  ];
+
+  // Incoming alert feed for auto-refresh
+  const INCOMING = [
+    { type: 'critical', msg: 'Storm system detected over Bay of Bengal. Re-routing 5 sea freight loads.', time: '0m ago' },
+    { type: 'warning',  msg: 'Driver fatigue alert: Truck ID-774 stationary 2.1hrs past schedule.', time: '0m ago' },
+    { type: 'info',     msg: 'Customs clearance accelerated: Dubai Hub processing +18% faster today.', time: '0m ago' },
+    { type: 'critical', msg: 'Road closure detected: Highway A7 Germany. AI rerouting 3 vehicles.', time: '0m ago' },
+    { type: 'warning',  msg: 'Singapore port worker strike likely next 48hrs. Contingency plan activated.', time: '0m ago' },
+  ];
+
+  let incomingIdx = 0;
+
+  function renderAlerts(data) {
+    const el = $('alerts-list');
+    el.innerHTML = '';
+    data.forEach((a, i) => {
+      const div = document.createElement('div');
+      div.className = `alert-item alert-${a.type}`;
+      div.style.animationDelay = (i * 0.08) + 's';
+      div.innerHTML = `
+        <div class="alert-dot"></div>
+        <div>
+          <div class="alert-msg">${a.msg}</div>
+          <div class="alert-time">${a.time}</div>
+        </div>`;
+      el.appendChild(div);
+    });
+  }
+
+  renderAlerts(ALERTS_POOL);
+
+  // Auto-refresh alerts every 6 seconds
+  setInterval(() => {
+    // Age existing alerts
+    ALERTS_POOL.forEach(a => {
+      const mins = parseInt(a.time) || 0;
+      a.time = (mins + 1) + 'm ago';
+    });
+    // Inject new one at top
+    const next = Object.assign({}, INCOMING[incomingIdx % INCOMING.length]);
+    ALERTS_POOL.unshift(next);
+    incomingIdx++;
+    if (ALERTS_POOL.length > 8) ALERTS_POOL.pop();
+    renderAlerts(ALERTS_POOL);
+  }, 6000);
+
+  /* ── AI DELAY CHART (Chart.js) ──────────────────────────────── */
+  /*
+   *  API Used: Chart.js 4.4.1 (CDN)
+   *  Type: Line chart with glow effect via custom plugin
+   *  Data: Simulated — replace with real API response if needed
+   */
+  (function buildChart() {
+    const canvas = $('ai-delay-chart');
+    const ctx = canvas.getContext('2d');
+
+    // Generate last 14 day labels
+    const labels = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      labels.push(d.toLocaleDateString('en', { month: 'short', day: 'numeric' }));
+    }
+
+    // Simulate predicted, actual, and anomaly data
+    const predicted = [], actual = [], anomaly = [];
+    for (let i = 0; i < 14; i++) {
+      predicted.push(parseFloat((1.2 + Math.sin(i * 0.4) * 0.5 + Math.random() * 0.25).toFixed(2)));
+      actual.push(i < 10
+        ? parseFloat((1.1 + Math.sin(i * 0.4 + 0.2) * 0.55 + Math.random() * 0.35).toFixed(2))
+        : null);
+      anomaly.push(i === 4 ? 3.2 : null); // spike anomaly on day 5
+    }
+
+    // Custom plugin: applies glow effect before datasets are drawn
+    const glowPlugin = {
+      id: 'glowLine',
+      beforeDatasetsDraw(chart) {
+        chart.ctx.save();
+        chart.ctx.shadowColor = '#00f5ff';
+        chart.ctx.shadowBlur  = 14;
+      },
+      afterDatasetsDraw(chart) {
+        chart.ctx.restore();
+      }
+    };
+
+    new Chart(ctx, {
+      type: 'line',
+      plugins: [glowPlugin],
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Predicted (hrs)',
+            data: predicted,
+            borderColor: '#00f5ff',
+            backgroundColor: 'rgba(0, 245, 255, 0.07)',
+            borderWidth: 2,
+            borderDash: [6, 3],
+            pointRadius: 3,
+            pointBackgroundColor: '#00f5ff',
+            tension: 0.4,
+            fill: true,
+          },
+          {
+            label: 'Actual (hrs)',
+            data: actual,
+            borderColor: '#39ff14',
+            backgroundColor: 'rgba(57, 255, 20, 0.05)',
+            borderWidth: 2,
+            pointRadius: 3,
+            pointBackgroundColor: '#39ff14',
+            tension: 0.4,
+            fill: false,
+          },
+          {
+            label: 'Anomaly',
+            data: anomaly,
+            borderWidth: 0,
+            pointRadius: 9,
+            pointStyle: 'triangle',
+            pointBackgroundColor: '#ff3860',
+            showLine: false,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(4, 8, 16, 0.97)',
+            borderColor: 'rgba(0, 245, 255, 0.3)',
+            borderWidth: 1,
+            titleColor: '#00f5ff',
+            bodyColor: '#e8f4ff',
+            titleFont: { family: "'Space Mono', monospace", size: 11 },
+            bodyFont:  { family: "'Space Mono', monospace", size: 11 },
+          }
+        },
+        scales: {
+          x: {
+            ticks: {
+              color: 'rgba(180,210,255,0.45)',
+              font: { size: 9, family: "'Space Mono', monospace" },
+              maxRotation: 0,
+              autoSkip: true,
+              maxTicksLimit: 7,
+            },
+            grid: { color: 'rgba(0,245,255,0.05)' },
+            border: { color: 'rgba(0,245,255,0.1)' },
+          },
+          y: {
+            min: 0,
+            max: 4,
+            ticks: {
+              color: 'rgba(180,210,255,0.45)',
+              font: { size: 9, family: "'Space Mono', monospace" },
+              callback: v => v.toFixed(1) + 'h',
+            },
+            grid: { color: 'rgba(0,245,255,0.05)' },
+            border: { color: 'rgba(0,245,255,0.1)' },
+          }
+        }
+      }
+    });
+  })();
+
+  /* ── WORLD MAP + MOVING TRUCKS (D3 + TopoJSON) ──────────────── */
+  /*
+   *  API Used:
+   *    - D3.js 7.8.5 (CDN) — SVG rendering, geo projections, animations
+   *    - TopoJSON 3.0.2 (CDN) — converts topology to GeoJSON features
+   *    - World Atlas (jsdelivr CDN) — world country boundaries topology
+   *      URL: https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json
+   *
+   *  Projection: d3.geoNaturalEarth1
+   */
+  (function buildMap() {
+    const mapArea = $('map-area');
+    const W = 900, H = mapArea.clientHeight || 360;
+    const tooltip = $('map-tooltip');
+
+    const svgEl = $('world-map');
+    const svg = d3.select(svgEl)
+      .attr('viewBox', `0 0 ${W} ${H}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet');
+
+    // Background
+    svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#020a14');
+
+    // Projection
+    const proj = d3.geoNaturalEarth1()
+      .scale(148)
+      .translate([W / 2, H / 2 + 10]);
+
+    const geoPath = d3.geoPath(proj);
+
+    // Fetch world topology from jsdelivr CDN
+    d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
+      .then(world => {
+
+        // Draw countries
+        svg.append('g')
+          .selectAll('path')
+          .data(topojson.feature(world, world.objects.countries).features)
+          .join('path')
+          .attr('d', geoPath)
+          .attr('fill', '#0a1628')
+          .attr('stroke', 'rgba(0,245,255,0.12)')
+          .attr('stroke-width', 0.4);
+
+        // ── Route definitions ──────────────────────────────────
+        // Each route: [lon, lat] in WGS-84
+        const ROUTES = [
+          { from: [121.4737, 31.2304], to: [-118.2437, 34.0522], color: '#00f5ff', type: 'SEA',  label: 'SHA → LA'  },
+          { from: [103.8198,  1.3521], to: [  4.4777, 51.9244], color: '#00f5ff', type: 'SEA',  label: 'SIN → RTM' },
+          { from: [ -74.006,  40.713], to: [  2.3522, 48.8566], color: '#ffb800', type: 'AIR',  label: 'NYC → PAR' },
+          { from: [139.6917, 35.6895], to: [ -87.630, 41.8781], color: '#ffb800', type: 'AIR',  label: 'TYO → CHI' },
+          { from: [ -99.133, 19.4326], to: [ -43.173,-22.9068], color: '#39ff14', type: 'LAND', label: 'MEX → RIO' },
+          { from: [  37.617, 55.7558], to: [ 116.407, 39.9042], color: '#39ff14', type: 'LAND', label: 'MOS → BEJ' },
+          { from: [  55.271, 25.2048], to: [  72.878, 19.0760], color: '#00f5ff', type: 'SEA',  label: 'DXB → MUM' },
+          { from: [  18.424,-33.9249], to: [  32.560,-25.9664], color: '#ff3860', type: 'RISK', label: 'CPT → MAP' },
+        ];
+
+        const movingIcons = [];
+
+        ROUTES.forEach((r, idx) => {
+          const p1 = proj(r.from);
+          const p2 = proj(r.to);
+          if (!p1 || !p2) return;
+
+          // Quadratic bezier control point (arc upward)
+          const mx = (p1[0] + p2[0]) / 2;
+          const my = Math.min(p1[1], p2[1]) - 45;
+          const dStr = `M${p1[0]},${p1[1]} Q${mx},${my} ${p2[0]},${p2[1]}`;
+
+          const isDash = r.type === 'RISK';
+
+          // Draw path
+          const routePath = svg.append('path')
+            .attr('d', dStr)
+            .attr('class', 'shipment-route')
+            .attr('stroke', r.color)
+            .attr('stroke-opacity', isDash ? 0.45 : 0.32)
+            .attr('stroke-dasharray', isDash ? '5 5' : 'none');
+
+          // Animate route draw on load (except risk lines)
+          if (!isDash) {
+            const len = routePath.node().getTotalLength();
+            routePath
+              .attr('stroke-dasharray', `${len} ${len}`)
+              .attr('stroke-dashoffset', len)
+              .transition()
+              .duration(1800)
+              .delay(idx * 280)
+              .ease(d3.easeLinear)
+              .attr('stroke-dashoffset', 0)
+              .on('end', function () {
+                d3.select(this).attr('stroke-dasharray', 'none');
+              });
+          }
+
+          // Hub dots at endpoints
+          [p1, p2].forEach(pt => {
+            svg.append('circle')
+              .attr('cx', pt[0]).attr('cy', pt[1]).attr('r', 3.5)
+              .attr('fill', r.color)
+              .attr('opacity', 0.85)
+              .style('filter', `drop-shadow(0 0 4px ${r.color})`);
+          });
+
+          // Moving icon (emoji mapped to transport type)
+          const EMOJI = { SEA: '🚢', AIR: '✈', LAND: '🚛', RISK: '⚠' };
+          const icon = svg.append('text')
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'middle')
+            .style('font-size', '13px')
+            .style('user-select', 'none')
+            .text(EMOJI[r.type] || '📦');
+
+          movingIcons.push({
+            icon,
+            dStr,
+            offset: Math.random(),                        // start at random position
+            speed: 0.00035 + Math.random() * 0.0003,    // varying speeds
+          });
+        });
+
+        // ── Animate moving icons along paths ──────────────────
+        let lastTS = null;
+        function animateIcons(ts) {
+          if (!lastTS) lastTS = ts;
+          const dt = ts - lastTS;
+          lastTS = ts;
+
+          movingIcons.forEach(item => {
+            item.offset = (item.offset + item.speed * dt) % 1;
+            // Use a temporary path element to get point at length
+            const tmpPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            tmpPath.setAttribute('d', item.dStr);
+            const len = tmpPath.getTotalLength();
+            const pt  = tmpPath.getPointAtLength(item.offset * len);
+            item.icon.attr('x', pt.x).attr('y', pt.y);
+          });
+
+          requestAnimationFrame(animateIcons);
+        }
+        requestAnimationFrame(animateIcons);
+
+        // ── Pulsing hub nodes with tooltip ────────────────────
+        const HUBS = [
+          { coords: [121.4737, 31.2304], label: 'Shanghai Hub',     status: 'HIGH CONGESTION' },
+          { coords: [-118.244, 34.0522], label: 'Los Angeles Port', status: 'NORMAL'          },
+          { coords: [  4.4777, 51.9244], label: 'Rotterdam Port',   status: 'CONGESTED'       },
+          { coords: [103.8198,  1.3521], label: 'Singapore Hub',    status: 'NORMAL'          },
+          { coords: [ 55.2708, 25.2048], label: 'Dubai Air Cargo',  status: 'NORMAL'          },
+          { coords: [  2.3522, 48.8566], label: 'Paris CDG',        status: 'NORMAL'          },
+          { coords: [ 72.8777, 19.0760], label: 'Mumbai Port',      status: 'NORMAL'          },
+        ];
+
+        HUBS.forEach(hub => {
+          const pt = proj(hub.coords);
+          if (!pt) return;
+
+          const statusColor =
+            hub.status === 'HIGH CONGESTION' ? '#ff3860' :
+            hub.status === 'CONGESTED'       ? '#ffb800' : '#00f5ff';
+
+          const g = svg.append('g')
+            .attr('transform', `translate(${pt[0]},${pt[1]})`)
+            .style('cursor', 'pointer');
+
+          // Expanding pulse ring
+          const ring = g.append('circle')
+            .attr('r', 5)
+            .attr('fill', statusColor)
+            .attr('opacity', 0.2);
+
+          (function doPulse() {
+            ring.transition().duration(1400)
+              .attr('r', 16).attr('opacity', 0)
+              .on('end', () => {
+                ring.attr('r', 5).attr('opacity', 0.2);
+                doPulse();
+              });
+          })();
+
+          // Core dot
+          g.append('circle')
+            .attr('r', 4)
+            .attr('fill', statusColor)
+            .attr('stroke', '#020a14')
+            .attr('stroke-width', 1.5)
+            .style('filter', `drop-shadow(0 0 5px ${statusColor})`);
+
+          // Hover tooltip
+          g.on('mouseover', function (event) {
+            const rect = svgEl.getBoundingClientRect();
+            tooltip.style.display = 'block';
+            tooltip.style.left = (event.clientX - rect.left + 14) + 'px';
+            tooltip.style.top  = (event.clientY - rect.top  - 10) + 'px';
+            tooltip.innerHTML  = `
+              <div style="font-weight:700;color:#00f5ff;margin-bottom:4px">${hub.label}</div>
+              <div style="color:${statusColor}">${hub.status}</div>`;
+          });
+          g.on('mousemove', function (event) {
+            const rect = svgEl.getBoundingClientRect();
+            tooltip.style.left = (event.clientX - rect.left + 14) + 'px';
+            tooltip.style.top  = (event.clientY - rect.top  - 10) + 'px';
+          });
+          g.on('mouseout', () => { tooltip.style.display = 'none'; });
+        });
+
+        // Map watermark label
+        svg.append('text')
+          .attr('x', 14).attr('y', 22)
+          .attr('font-family', "'Space Mono',monospace")
+          .attr('font-size', 11)
+          .attr('fill', 'rgba(0,245,255,0.4)')
+          .text('GLOBAL LOGISTICS NETWORK — LIVE');
+
+      })
+      .catch(() => {
+        // Fallback if network is unavailable
+        mapArea.querySelector('svg').remove();
+        mapArea.innerHTML += `
+          <div style="display:flex;align-items:center;justify-content:center;
+            height:100%;color:rgba(0,245,255,0.4);
+            font-family:'Space Mono',monospace;font-size:13px;text-align:center;">
+            🌐 Map requires internet access<br>
+            <span style="font-size:10px;margin-top:8px;display:block">
+              CDN: cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json
+            </span>
+          </div>`;
+      });
+  })();
+
+  /* ── AI CHATBOT ─────────────────────────────────────────────── */
+  /*
+   *  ⚡ OPTIONAL REAL AI:
+   *  Replace the RESPONSES lookup below with a real fetch() call to:
+   *    - Anthropic API: https://api.anthropic.com/v1/messages
+   *    - OpenAI API:    https://api.openai.com/v1/chat/completions
+   *  Add your API key in the Authorization header.
+   *  See commented example at the bottom of this script block.
+   */
+  const RESPONSES = {
+    delay:    "Delay analysis: Current avg is 1.7hrs — 14% below last week. AI rerouted 6 high-risk loads avoiding major bottlenecks.",
+    risk:     "Top risk zones: Pacific (78%), Suez (61%), EU Rail (38%). Real-time mitigation active on all flagged lanes.",
+    shipment: "2,847 active shipments tracked. 94% on schedule. 8 disruptions flagged — 3 critical, 5 advisory.",
+    route:    "Optimal routes recalculated every 90 seconds using weather, port congestion, and geopolitical data feeds.",
+    weather:  "Weather impact: Typhoon Hinnamnor affects Pacific routes. EU experiencing clear conditions. Americas nominal.",
+    default: [
+      "Analyzing 2,847 active shipments... No critical anomalies in last 15 minutes.",
+      "Route SH-449 shows 23% congestion risk. Alternate via Strait of Malacca recommended.",
+      "Rotterdam Port congestion: predicted +18hr delay. Rerouting 5 containers to Hamburg.",
+      "AI risk score updated: Pacific corridor at 78% due to typhoon path projection.",
+      "Demand forecasting shows 34% surge expected in EU-ASIA lane next 7 days.",
+    ]
+  };
+  let defaultIdx = 0;
+
+  function typeMessage(container, text) {
+    container.innerHTML = '';
+    let i = 0;
+    const interval = setInterval(() => {
+      container.textContent = text.slice(0, i++);
+      $('chat-msgs').scrollTop = $('chat-msgs').scrollHeight;
+      if (i > text.length) clearInterval(interval);
+    }, 20);
+  }
+
+  function sendChat(userMsg) {
+    if (!userMsg.trim()) return;
+    const chatMsgs = $('chat-msgs');
+    $('chat-input').value = '';
+
+    // User bubble
+    const userDiv = document.createElement('div');
+    userDiv.className = 'chat-msg user';
+    userDiv.textContent = userMsg;
+    chatMsgs.appendChild(userDiv);
+
+    // Typing indicator
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'chat-msg ai';
+    aiDiv.innerHTML = '<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
+    chatMsgs.appendChild(aiDiv);
+    chatMsgs.scrollTop = chatMsgs.scrollHeight;
+
+    // Determine response (keyword matching — swap for real API call)
+    const lower = userMsg.toLowerCase();
+    let reply;
+    if (lower.includes('delay'))                      reply = RESPONSES.delay;
+    else if (lower.includes('risk'))                  reply = RESPONSES.risk;
+    else if (lower.includes('shipment') || lower.includes('active')) reply = RESPONSES.shipment;
+    else if (lower.includes('route'))                 reply = RESPONSES.route;
+    else if (lower.includes('weather') || lower.includes('storm'))  reply = RESPONSES.weather;
+    else {
+      reply = RESPONSES.default[defaultIdx % RESPONSES.default.length];
+      defaultIdx++;
+    }
+
+    /* ── UNCOMMENT TO USE REAL ANTHROPIC API ─────────────────────
+    fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': 'YOUR_ANTHROPIC_API_KEY_HERE',
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 200,
+        messages: [
+          {
+            role: 'user',
+            content: `You are a logistics AI for NEXUS Command Center. Answer briefly (1-2 sentences): ${userMsg}`
+          }
+        ]
+      })
+    })
+    .then(r => r.json())
+    .then(data => {
+      reply = data.content[0].text;
+      setTimeout(() => typeMessage(aiDiv, reply), 800);
+    });
+    return; // exit so the offline reply below doesn't fire
+    ─────────────────────────────────────────────────────────── */
+
+    setTimeout(() => typeMessage(aiDiv, reply), 950);
+  }
+
+  $('chat-send-btn').addEventListener('click',  () => sendChat($('chat-input').value));
+  $('chat-input').addEventListener('keydown',   e => { if (e.key === 'Enter') sendChat(e.target.value); });
+
+  /* ── VOICE INPUT (Web Speech API — Chrome only) ─────────────── */
+  const voiceBtn = $('voice-btn');
+  let isListening = false;
+
+  voiceBtn.addEventListener('click', () => {
+    isListening = !isListening;
+    voiceBtn.classList.toggle('listening', isListening);
+
+    if (isListening) {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SR) {
+        const rec = new SR();
+        rec.lang = 'en-US';
+        rec.onresult = e => {
+          $('chat-input').value = e.results[0][0].transcript;
+          voiceBtn.classList.remove('listening');
+          isListening = false;
+        };
+        rec.onend = () => {
+          voiceBtn.classList.remove('listening');
+          isListening = false;
+        };
+        rec.onerror = () => {
+          voiceBtn.classList.remove('listening');
+          isListening = false;
+        };
+        rec.start();
+      } else {
+        // Fallback: pre-fill a demo query
+        $('chat-input').value = 'What is the current risk level for the Pacific corridor?';
+        voiceBtn.classList.remove('listening');
+        isListening = false;
+      }
+    }
+  });
+
+})();
+</script>
+
+</body>
+</html>
