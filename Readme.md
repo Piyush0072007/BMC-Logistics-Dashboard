@@ -99,6 +99,21 @@ Displays KPIs, route movement, predictive charts, and alerts in a centralized co
 ### 5. Decision Support Layer
 Enables operators to act proactively using AI-generated logistics insights.
 
+### Architecture Diagram
+
+```text
+Shipment Data Sources
+        ↓
+Risk Detection Engine
+        ↓
+Delay Prediction Engine
+        ↓
+Alert Generation Engine
+        ↓
+Visualization Dashboard
+        ↓
+AI Decision Support
+
 
 
 ## Technical Stack
